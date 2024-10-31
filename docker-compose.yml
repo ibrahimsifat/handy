@@ -1,0 +1,170 @@
+services:
+  ####################################################################################################
+  # APP
+  ####################################################################################################
+  app:
+    build:
+      args:
+        user: developer
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+      context: ./
+      dockerfile: Dockerfile
+    image: app
+    container_name: app-handy
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+      - ~/.ssh:/home/developer/.ssh:ro # More secure: mounted to non-root user
+    environment:
+      VIRTUAL_HOST: laravel.test
+      PHP_OPCACHE_ENABLE: 1
+      PHP_OPCACHE_VALIDATE_TIMESTAMPS: 0 # Set to 1 in development
+      PHP_OPCACHE_REVALIDATE_FREQ: 0
+    healthcheck:
+      test: ['CMD', 'php', 'artisan', 'health:check']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - laravel
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  ####################################################################################################
+  # DATABASE (MySQL)
+  ####################################################################################################
+  db:
+    image: mysql:8.0
+    container_name: mysql-handy
+    restart: unless-stopped
+    ports:
+      - '3306:3306'
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - mysql-logs:/var/log/mysql
+      - ./docker-compose/mysql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - laravel
+
+  ####################################################################################################
+  # Nginx
+  ####################################################################################################
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-handy
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./:/var/www:ro # Read-only access
+      - ./docker-compose/nginx:/etc/nginx/conf.d:ro
+      - ./docker-compose/nginx/ssl:/etc/nginx/conf.d/ssl:ro
+      - ./docker-compose/nginx/phpmyadmin.conf:/etc/nginx/conf.d/phpmyadmin.conf:ro
+    depends_on:
+      - app
+    healthcheck:
+      test: ['CMD', 'nginx', '-t']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - laravel
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  ####################################################################################################
+  # phpMyAdmin
+  ####################################################################################################
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: phpmyadmin-handy
+    ports:
+      - '8080:80'
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+      UPLOAD_LIMIT: 300M
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:80']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - laravel
+
+  ####################################################################################################
+  # Redis
+  ####################################################################################################
+  redis:
+    image: redis/redis-stack:latest
+    container_name: handy-redis
+    ports:
+      - '6379:6379'
+      - '8002:8001'
+    environment:
+      - REDIS_ARGS=--save 900 1
+      - ALLOW_EMPTY_PASSWORD=no
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - laravel
+    command: redis-server --save 60 1 --loglevel warning
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+####################################################################################################
+# VOLUMES
+####################################################################################################
+volumes:
+  mysql-data:
+    driver: local
+  mysql-logs:
+    driver: local
+  redis-data:
+    driver: local
+
+####################################################################################################
+# NETWORKS
+####################################################################################################
+networks:
+  laravel:
+    driver: bridge

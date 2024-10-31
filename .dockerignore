@@ -1,0 +1,53 @@
+# Ignore all hidden files and directories
+.*
+!.env  # Allow .env to be copied if required
+
+# Laravel specific folders
+/vendor/
+node_modules/
+
+# Cache and logs
+/storage/*.key
+/storage/*.log
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/bootstrap/cache/*
+
+# Composer and NPM logs
+composer.lock
+yarn.lock
+npm-debug.log
+pnpm-debug.log
+package-lock.json
+
+# Ignore OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE and editor configs
+/.vscode/
+/.idea/
+
+# Docker and Git related
+.dockerignore
+.git/
+.gitignore
+
+# Temporary files
+*.swp
+*.bak
+*.tmp
+*.temp
+
+# Ignore test files and directories
+/tests/
+phpunit.xml
+phpunit.xml.dist
+
+# Ignore environment files
+.env.local
+.env.testing
+
+# Ignore coverage reports
+/coverage/
